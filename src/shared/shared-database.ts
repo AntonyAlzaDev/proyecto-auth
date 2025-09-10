@@ -42,4 +42,53 @@ export class SharedUserDatabse{
         }
     ]
 
+    static findByEmail(email: string): User | null{
+        const user = this.users.find( u =>
+            u.email === email.toLowerCase() && u.isActive
+        );
+
+        return user || null;
+    }
+
+    static findById(id: number): User | null{
+        const user = this.users.find( u => u.id === id && u.isActive);
+        return user || null;
+    }
+
+    static addUser(user: User): void{
+        this.users.push(user);
+    }
+
+    static updateUser(id: number, updates: Partial<User>): User | null{
+        const index = this.users.findIndex( u => u.id === id );
+
+        if( index === -1) return null;
+
+        this.users[index] = { ...this.users[index], ...updates };
+
+        return this.users[index];
+    }
+
+    static getActiveUsers():User[]{
+        return this.users.filter( u => u.isActive);
+    }
+
+    static getAllUsers():User[]{
+        return this.users;
+    } 
+
+    static getTotalCount():number{
+        return this.users.length;
+    } 
+
+    static getActiveCount():number{
+        return this.users.filter( u => u.isActive).length;
+    } 
+
+
+
+
+
+    
+
 }
