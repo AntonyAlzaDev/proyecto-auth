@@ -2,27 +2,18 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'node_modules/bcryptjs';
 import { User, UserWithoutPassword } from 'src/interfaces/user.interface';
+import { SharedUserDatabse } from 'src/shared/shared-database';
 
 @Injectable()
 export class AuthService {
-    private static userDB: User[] = [
-        {
-            id: 1,
-            email: 'admin@test.com',
-            password: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // "password"
-            name: 'Administrador Sistema',
-            role: 'admin',
-            isActive: true,
-            createdAt: new Date('2024-01-01')
-        }
-    ];
-
-    constructor(private jwtService: JwtService){}
+ 
+    constructor(private jwtService: JwtService){
+    }
 
 
-    async register(email: string, password: string, name: string){
+    async register(email: string, password: string, name: string, role: 'user' | 'admin' | 'moderator' = 'user'){
         
-        const existingUser = AuthService.userDB.find(u => u.email.toLowerCase() === email.toLowerCase());
+        const existingUser = SharedUserDatabse.findByEmail(email);
 
         if(existingUser){
             throw new ConflictException('Ya existe un usuario con ese email');
@@ -43,12 +34,13 @@ export class AuthService {
             email: email.toLowerCase().trim(),
             password: hashedPassword,
             name: name.trim(),
-            role: 'user',
+            role: role,
             isActive: true,
-            createdAt: new Date()
+            createdAt: new Date(),
+            updatedAt: new Date()
         };
 
-        AuthService.userDB.push(newUser);
+        SharedUserDatabse.addUser(newUser);
 
         return {
             message:  'Usuario registrado exitosamente',
@@ -57,16 +49,15 @@ export class AuthService {
                 id: newUser.id,
                 email: newUser.email,
                 name: newUser.name,
-                role: newUser.role
+                role: newUser.role,
+                createdAt: newUser.createdAt
             }
         };
     }
 
     async login(email: string, password: string){
         
-        const user = AuthService.userDB.find( u =>
-            u.email === email.toLowerCase() && u.isActive
-        );
+        const user = SharedUserDatabse.findByEmail(email);
 
         if(!user){
             throw new UnauthorizedException('Email o ontraseña incorrectos');
@@ -82,7 +73,8 @@ export class AuthService {
             sub: user.id,
             email: user.email,
             name: user.name,
-            role: user.role
+            role: user.role,
+            iat: Math.floor(Date.now()/1000)
         };
 
 
@@ -94,18 +86,49 @@ export class AuthService {
             name: user.name,
             role: user.role,
             isActive: user.isActive,
+            phone: user.phone,
+            avatar: user.avatar,
             createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
         }
 
         return{
             acces_token: accesToken,
             user: userResponse,
-            message: 'Login exitoso'
+            message: 'Login exitoso',
+            tokenType: 'Bearer',
+            expiresIn:'1h'
         }
     }
 
+    async changePassword(userId: number, currentPassword: string, newPassword: string){
+
+        const user = SharedUserDatabse.findById(userId);
+        
+        if(!user){
+            throw new UnauthorizedException('Usuario no encontrado');
+        }
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword,user.password);
+
+        if(!isCurrentPasswordValid){
+            throw new UnauthorizedException('Contraseña actual incorrecta');
+        }
+
+        const hashedNewPassword = await bcrypt.hash(newPassword,10);
+
+        SharedUserDatabse.updateUser(userId,{
+            password: hashedNewPassword,
+            updatedAt: new Date()
+        });
+
+        return {message: 'Contraseña actualizada exitosamente'}
+
+    }
+
+
     getAllUsersForDebug(): UserWithoutPassword[]{
-        return AuthService.userDB.map(user =>{
+        return SharedUserDatabse.getAllUsers().map(user =>{
             // const usarioIterado = user;
             const {password, ...userWithoutPassword} = user;
             
@@ -113,8 +136,12 @@ export class AuthService {
         });
     }
 
+    getActiveUsers(): number{
+        return SharedUserDatabse.getActiveCount();
+    }
+
     getUserCount():number{
-        return AuthService.userDB.length;
+        return SharedUserDatabse.getTotalCount();
     }
 
 }
